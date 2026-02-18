@@ -13,10 +13,7 @@ Citation network analysis using [OpenAlex](https://openalex.org/) and [3d-force-
 ### Sample datasets
 
 #### Authors
-[Daniel J. Exeter](https://uoa-eresearch.github.io/citations/?data=Dan) 881 nodes 1732 links  
-[Giovanni Coco](https://uoa-eresearch.github.io/citations/?data=Giovanni) 5459 nodes 40975 links  
-[Mark Gahegan](https://uoa-eresearch.github.io/citations/?data=Mark) 2847 nodes 8751 links  
-[Quinn Asena](https://uoa-eresearch.github.io/citations/?data=Quinn) 22 nodes 24 links  
+[Daniel J. Exeter](https://tuomaseerola.github.io/citations/?data=Petri) 40,000 nodes  
 
 #### Papers
 [Decolonizing Metholodologies](https://uoa-eresearch.github.io/citations/?data=Decolonizing_Methodologies) 6036 nodes 7254 links  
