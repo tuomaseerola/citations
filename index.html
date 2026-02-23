@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <!-- CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css"
+        integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2" crossorigin="anonymous">
+
+    <!-- jQuery and JS bundle w/ Popper.js -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx"
+        crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/3d-force-graph@1.67.4/dist/3d-force-graph.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js"
+        integrity="sha512-yocoLferfPbcwpCMr8v/B0AB4SWpJlouBwgE0D3ZHaiP1nuu5djZclFEIj9znuqghaZ3tdCMRrreLoM8km+jIQ=="
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script> <!-- Updated to the latest version -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js" referrerpolicy="no-referrer"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+    <title>Citation network explorer</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E">
+    <style>
+        html,
+        body,
+        #network {
+            height: 100%;
+            width: 100%;
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .nodetooltip {
+            background-color: gray;
+            padding: 5px;
+        }
+
+        #controls {
+            position: absolute;
+            right: 10px;
+            bottom: 10px;
+            background-color: white;
+            padding: 20px;
+        }
+
+        #title {
+            position: absolute;
+            top: 30;
+            left: 0;
+            right: 0;
+            margin: auto;
+            z-index: 1000;
+            font-size: 1.3rem;
+            width: 50%;
+            text-align: center;
+            color: white;
+            border-radius: 5px;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.8);
+            font-family: Arial, Helvetica, sans-serif;
+            text-shadow: 2px 2px #000000;
+            font-weight: normal;
+        }
+
+        .small {
+            text-align: center;
+            font-size: .7rem;
+            margin: 10px;
+            color: gray;
+        }
+
+        #spinner {
+            position: absolute;
+            right: 60px;
+            top: 130px;
+        }
+
+        #alert {
+            display: none;
+            position: absolute;
+            top: 30%;
+            left: 0;
+            right: 0;
+            margin: auto;
+            width: 60%;
+        }
+
+        #legend {
+            display: grid;
+            grid-auto-flow: column;
+            grid-auto-columns: 1fr;
+            grid-template-rows: 1fr 1fr;
+            text-align: center;
+            font-size: .7rem;
+        }
+
+        #controls.hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <h1 id="title"><span id="subtitle"><span id="name">Dan</span>'s citation network</span> <span id="year"></span>
+    </h1>
+    <div id="network"></div>
+    <div id="controls" class="hidden">
+        <div id="timeline"></div>
+        <div class="small">Hover over the timeline to filter the network graph by year<br>Click to hold</div>
+        <button id="reset_year" class="btn btn-sm btn-outline-secondary" style="margin: 6px 0;">Reset year filter</button>
+        Colour by
+        <select id="color">
+            <option value="cited_by_count" selected>Citation count</option>
+            <option value="n_authors">Number of authors</option>
+            <option value="n_inst">Number of institutions</option>
+            <option value="domain">Domain</option>
+        </select><div id="legend"></div><br>
+        Size by
+        <select id="size">
+            <option value="">Constant</option>
+            <option value="cited_by_count" selected>Citation count</option>
+            <option value="n_authors">Number of authors</option>
+            <option value="n_inst">Number of institutions</option>
+            <option value="n_fields">Number of fields</option>
+        </select><br><br>
+        Size scale
+        <select id="size_scale">
+            <option value="linear" selected>Linear</option>
+            <option value="log">Log</option>
+            <option value="exp">Exponential</option>
+        </select><br><br>
+        Node cap
+        <select id="node_cap">
+            <option value="">No cap</option>
+            <option value="10">10</option>
+            <option value="50">50</option>
+            <option value="100" selected>100</option>
+            <option value="250">250</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+            <option value="2000">2000</option>
+            <option value="5000">5000</option>
+        </select><br><br>
+        Group by
+        <select id="group">
+            <option value="paper">Paper</option>
+            <option value="author" selected>Author</option>
+            <option value="journal">Journal</option>
+            <option value="inst">Institution</option>
+            <option value="field">Field</option>
+            <option value="domain">Domain</option>
+        </select><br><br>
+        <div class="small"><a href="https://github.com/UoA-eResearch/citations">GitHub</a></div>
+    </div>
+    <div id="modal" class="modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 id="modal-title" class="modal-title" id="exampleModalLongTitle"></h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div id="modal-body" class="modal-body">
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="spinner" class="spinner-border text-primary" role="status"></div>
+    <div id="alert" class="alert alert-danger alert-dismissible">
+        <a id="alert_close" href="#" class="close">&times;</a>
+        Sorry - I don't know how to handle that kind of request (<span id="requestdetails"></span>) just yet
+    </div>
+    <button onclick="toggleGUI()" style="position: absolute; top: 10px; right: 10px; z-index: 1000;">Toggle GUI</button>
+
+    <script type="text/javascript">
+        const DEFAULT_COLOR = '#1f77b4';
+        const HIGHLIGHT_COLOR = '#e377c2'
+        function capitalize(s) {
+            return s.toLowerCase().replace(/\b./g, function (a) { return a.toUpperCase(); });
+        };
+        $("#alert_close").click(function () {
+            $("#alert").hide();
+        });
+        function update() {
+            console.log(current_data)
+            renderGraph(current_data, node => `<div class="nodetooltip">${generateHTMLTooltip(node)}</div>`)
+            var time_data = summarise_by_year(current_data);
+            console.log(time_data);
+            Plotly.restyle("timeline", {
+                x: [Object.keys(time_data)],
+                y: [Object.values(time_data)],
+                marker: {
+                    color: Object.keys(time_data).map(n => DEFAULT_COLOR)
+                }
+            });
+            $("#spinner").hide();
+        }
+        function uniq(arr) {
+            return [...new Set(arr)]
+        }
+        function colorscale(valuesOriginal, valuesNormalized) {
+            if (!valuesOriginal || valuesOriginal.length === 0) {
+                return chroma.scale('Spectral').domain([0, 1]);
+            }
+            var breaksOriginal = chroma.limits(uniq(valuesOriginal), 'q', 12);
+            var min = Math.min(...valuesOriginal);
+            var max = Math.max(...valuesOriginal);
+            var denom = (max - min) || 1;
+            var breaksNorm = breaksOriginal.map(b => (b - min) / denom);
+            var scale = chroma.scale('Spectral').domain(breaksNorm.reverse());
+            console.log(breaksOriginal, scale);
+            $("#legend").empty()
+            for (i of breaksOriginal.reverse()) {
+                var norm = (i - min) / denom;
+                $("#legend").append(`<div>${Math.round(i)}</div><div style="background: ${scale(norm)}"></div>`)
+            }
+            return scale
+        }
+        function categoricalColors(values) {
+            var uniqVals = uniq(values.filter(v => v !== undefined && v !== null)).sort();
+            var colors = chroma.scale('Set2').colors(Math.max(uniqVals.length, 3));
+            var map = new Map();
+            uniqVals.forEach((v, i) => map.set(v, colors[i % colors.length]));
+            $("#legend").empty();
+            for (var v of uniqVals) {
+                $("#legend").append(`<div>${v}</div><div style="background: ${map.get(v)}"></div>`);
+            }
+            return map;
+        }
+        function normalizeMap(nodes, field, transform) {
+            var vals = nodes.map(n => n[field]).filter(v => typeof v === "number" && !Number.isNaN(v));
+            if (vals.length === 0) return new Map();
+            if (transform) {
+                vals = vals.map(transform);
+            }
+            var min = Math.min(...vals);
+            var max = Math.max(...vals);
+            var denom = (max - min) || 1;
+            var map = new Map();
+            for (var n of nodes) {
+                var v = n[field];
+                if (typeof v === "number" && !Number.isNaN(v)) {
+                    var tv = transform ? transform(v) : v;
+                    var norm = (tv - min) / denom;
+                    map.set(n.id, norm);
+                }
+            }
+            return map;
+        }
+        function scaleSize01(val, mode) {
+            if (mode === "log") {
+                return Math.log10(1 + 9 * val);
+            }
+            if (mode === "exp") {
+                return Math.pow(val, 2);
+            }
+            return val;
+        }
+        function sizeTransform(mode) {
+            if (mode === "log") {
+                return v => Math.log10(1 + 99 * v);
+            }
+            if (mode === "exp") {
+                return v => v * v;
+            }
+            return null;
+        }
+        function sizeRange(val01) {
+            return 1 + 9 * val01;
+        }
+        function updateStyleOptions(nodes) {
+            var hasDomain = nodes.some(n => n.domain !== undefined && n.domain !== null);
+            var hasNA = nodes.some(n => typeof n.n_authors === "number");
+            var hasNI = nodes.some(n => typeof n.n_inst === "number");
+            var hasNF = nodes.some(n => typeof n.n_fields === "number");
+            $("#color option[value='domain']").prop("disabled", !hasDomain);
+            $("#color option[value='n_authors']").prop("disabled", !hasNA);
+            $("#color option[value='n_inst']").prop("disabled", !hasNI);
+            $("#size option[value='n_authors']").prop("disabled", !hasNA);
+            $("#size option[value='n_inst']").prop("disabled", !hasNI);
+            $("#size option[value='n_fields']").prop("disabled", !hasNF);
+            if (!hasDomain && $("#color").val() === "domain") $("#color").val("cited_by_count");
+            if (!hasNA && $("#color").val() === "n_authors") $("#color").val("cited_by_count");
+            if (!hasNI && $("#color").val() === "n_inst") $("#color").val("cited_by_count");
+            if (!hasNA && $("#size").val() === "n_authors") $("#size").val("cited_by_count");
+            if (!hasNI && $("#size").val() === "n_inst") $("#size").val("cited_by_count");
+            if (!hasNF && $("#size").val() === "n_fields") $("#size").val("cited_by_count");
+        }
+        function applyStyles(nodes) {
+            updateStyleOptions(nodes);
+            var colorField = $("#color").val();
+            var sizeField = $("#size").val();
+            var sizeScale = $("#size_scale").val();
+
+            if (sizeField) {
+                var sizeMap = normalizeMap(nodes, sizeField, sizeTransform(sizeScale));
+                graph.nodeVal(n => {
+                    var v = sizeMap.has(n.id) ? sizeMap.get(n.id) : 0.5;
+                    return sizeRange(v);
+                });
+            } else {
+                graph.nodeVal(1);
+            }
+
+            if (colorField == "field" || colorField == "domain") {
+                var values = nodes.map(n => n[colorField]);
+                var cmap = categoricalColors(values);
+                graph.nodeColor(n => cmap.get(n[colorField]) || "#ccc");
+            } else {
+                var valuesOriginal = nodes.map(n => n[colorField]).filter(v => typeof v === "number" && !Number.isNaN(v));
+                var colorMap = normalizeMap(nodes, colorField);
+                var scale = colorscale(valuesOriginal, Array.from(colorMap.values()));
+                graph.nodeColor(n => scale(colorMap.has(n.id) ? colorMap.get(n.id) : 0).css());
+            }
+        }
+        function getEdges(nodes) {
+            if (window.group == "field") return []
+            var visible_nodes = nodes.map(n => n.id)
+            var edges = [];
+            for (var node of nodes) {
+                for (var rid of node.referenced_works) {
+                    if (visible_nodes.includes(rid)) {
+                        edges.push({ source: node.id, target: rid })
+                    }
+                }
+            }
+            return edges
+        }
+        function filterByYear(nodes, year) {
+            if (year === null || year === undefined) return nodes;
+            return nodes.filter(n => n.publication_year <= year);
+        }
+        function filterConnected(nodes) {
+            var edges = getEdges(nodes);
+            if (edges.length === 0) {
+                return { nodes: nodes, links: edges };
+            }
+            var connected = new Set();
+            for (var e of edges) {
+                connected.add(e.source);
+                connected.add(e.target);
+            }
+            var filtered = nodes.filter(n => connected.has(n.id));
+            return { nodes: filtered, links: edges };
+        }
+        function renderGraph(nodes, labelFn, applyLinkStyles = false, opts = {}) {
+            var year = (opts.hasOwnProperty("year")) ? opts.year : window.year;
+            var applyYear = (opts.hasOwnProperty("applyYear")) ? opts.applyYear : true;
+            var filtered = applyYear ? filterByYear(nodes, year) : nodes;
+            var capped = capByCount(filtered, currentCap());
+            var result = filterConnected(capped);
+            var g = graph.graphData({
+                nodes: result.nodes,
+                links: result.links
+            }).nodeLabel(labelFn);
+            applyStyles(result.nodes);
+            if (applyLinkStyles) {
+                g.linkAutoColorBy(e => e.count)
+                    .linkWidth(e => e.count);
+            }
+        }
+        const MAILTO = "tuomas.eerola@durham.ac.uk";
+        const urlParams = new URLSearchParams(window.location.search);
+        var data = urlParams.get('data');
+        var authorQuery = null;
+        if (data && data.toLowerCase().startsWith("author:")) {
+            authorQuery = data.slice("author:".length);
+        } else if (data && data.toLowerCase().startsWith("author_id:")) {
+            authorQuery = data.slice("author_id:".length);
+        } else if (data && data.toLowerCase().includes("openalex.org/a")) {
+            authorQuery = data;
+        } else if (data && (/^a?\d+$/i.test(data))) {
+            authorQuery = data;
+        }
+        var isDecolonizing = false;
+        if (!data) {
+            data = "data/Dan.json.gz"
+        } else if (data == "Decolonizing_Methodologies") {
+            $("#subtitle").text("Influence of Decolonizing Methodologies")
+            isDecolonizing = true;
+            data = "Decolonizing_Methodologies/data.json.gz"
+        } else if (!authorQuery) {
+            $("#name").text(data)
+            data = `data/${data}.json.gz`
+        }
+        var is_aggregated = data.includes("_agg_");
+        var is_grouped = data.includes("_group_");
+        var pre_group = null;
+        if (is_grouped) {
+            var match = data.match(/_group_(paper|author|inst|field|journal)\.json/);
+            if (match) pre_group = match[1];
+        }
+        if (is_aggregated && !pre_group) {
+            var matchAgg = data.match(/_agg_(paper|author|inst|field|journal)\.json/);
+            if (matchAgg) pre_group = matchAgg[1];
+        }
+        var data_base_for_groups = null;
+        if (is_grouped) {
+            data_base_for_groups = data.replace(/_group_(paper|author|inst|field|journal)\.json(\.gz)?$/, "");
+        }
+        function summarise_by_year(data) {
+            var time_data = {}
+            for (var node of data) {
+                var d = node.publication_year;
+                if (!time_data[d]) time_data[d] = 0;
+                time_data[d]++;
+            }
+            return time_data;
+        }
+        function parseVec(param, fallback) {
+            var raw = urlParams.get(param);
+            if (!raw) return fallback;
+            var parts = raw.split(",").map(s => parseFloat(s.trim()));
+            if (parts.length !== 3 || parts.some(n => Number.isNaN(n))) return fallback;
+            return { x: parts[0], y: parts[1], z: parts[2] };
+        }
+        function runCameraTour() {
+            var start = parseVec("cam0", { x: 0, y: 0, z: 200 });
+            var end = parseVec("cam1", { x: 0, y: 0, z: 80 });
+            var duration = parseInt(urlParams.get("camms") || "3000", 10);
+            var delay = parseInt(urlParams.get("camdelay") || "500", 10);
+            graph.cameraPosition(start, { x: 0, y: 0, z: 0 }, 0);
+            setTimeout(function () {
+                graph.cameraPosition(end, { x: 0, y: 0, z: 0 }, duration);
+            }, delay);
+        }
+        function maxYear(data) {
+            var years = data.map(n => n.publication_year).filter(y => y !== undefined && y !== null);
+            if (years.length === 0) return null;
+            return Math.max(...years);
+        }
+        function filterRecentYears(data, yearsBack) {
+            var latest = maxYear(data);
+            if (latest === null) return data;
+            var cutoff = latest - yearsBack + 1;
+            return data.filter(n => n.publication_year >= cutoff);
+        }
+        function capByCount(data, maxNodes) {
+            if (!maxNodes || data.length <= maxNodes) return data;
+            var sorted = data.slice().sort((a, b) => (b.cited_by_count || 0) - (a.cited_by_count || 0));
+            return sorted.slice(0, maxNodes);
+        }
+        function currentCap() {
+            var val = $("#node_cap").val();
+            return val ? parseInt(val, 10) : null;
+        }
+        var jsonWorker = null;
+        function getJsonWorker() {
+            if (jsonWorker) return jsonWorker;
+            var workerCode = `
+                self.importScripts('https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js');
+                self.onmessage = function (e) {
+                    try {
+                        var bytes = new Uint8Array(e.data);
+                        var text = new TextDecoder('utf-8').decode(self.pako.inflate(bytes));
+                        var data = JSON.parse(text);
+                        self.postMessage({ ok: true, data: data });
+                    } catch (err) {
+                        self.postMessage({ ok: false, error: (err && err.message) ? err.message : String(err) });
+                    }
+                };
+            `;
+            var blob = new Blob([workerCode], { type: "application/javascript" });
+            jsonWorker = new Worker(URL.createObjectURL(blob));
+            return jsonWorker;
+        }
+
+        function loadJSON(url, callback) {
+            if (url.endsWith(".gz")) {
+                fetch(url).then(function (response) {
+                    if (!response.ok) throw new Error("Failed to fetch " + url);
+                    return response.arrayBuffer();
+                }).then(function (buffer) {
+                    var worker = getJsonWorker();
+                    worker.onmessage = function (e) {
+                        if (e.data && e.data.ok) {
+                            callback(e.data.data);
+                        } else {
+                            console.warn("Worker parse failed, falling back to main thread:", e.data && e.data.error);
+                            var bytes = new Uint8Array(buffer);
+                            var text = new TextDecoder("utf-8").decode(pako.inflate(bytes));
+                            callback(JSON.parse(text));
+                        }
+                    };
+                    worker.postMessage(buffer, [buffer]);
+                }).catch(function () {
+                    if (url.endsWith(".json.gz")) {
+                        loadJSON(url.slice(0, -3), callback);
+                    } else {
+                        console.error("Failed to load JSON:", url);
+                    }
+                });
+                return;
+            }
+            $.getJSON(url, callback).fail(function () {
+                console.error("Failed to load JSON:", url);
+            });
+        }
+
+        function normalizeAuthorId(input) {
+            if (!input) return null;
+            var s = input.trim();
+            if (s.startsWith("https://openalex.org/")) {
+                s = s.replace("https://openalex.org/", "");
+            }
+            if (/^a\d+$/i.test(s)) {
+                s = "A" + s.slice(1);
+            }
+            if (/^\d+$/.test(s)) {
+                s = "A" + s;
+            }
+            return s.startsWith("A") ? ("https://openalex.org/" + s) : s;
+        }
+        async function fetchAuthorIdByName(name) {
+            var url = "https://api.openalex.org/authors?search=" + encodeURIComponent(name) +
+                "&per-page=1&mailto=" + encodeURIComponent(MAILTO);
+            var resp = await fetch(url);
+            if (!resp.ok) throw new Error("Failed to search author: " + name);
+            var json = await resp.json();
+            var first = json && json.results && json.results[0];
+            if (!first || !first.id) return null;
+            return {
+                id: normalizeAuthorId(first.id),
+                name: first.display_name || name
+            };
+        }
+        async function fetchAuthorNameById(authorId) {
+            var url = "https://api.openalex.org/authors/" + encodeURIComponent(authorId) +
+                "?mailto=" + encodeURIComponent(MAILTO);
+            var resp = await fetch(url);
+            if (!resp.ok) return null;
+            var json = await resp.json();
+            return json && json.display_name ? json.display_name : null;
+        }
+        async function fetchAuthorWorks(authorInput) {
+            var authorId = normalizeAuthorId(authorInput);
+            if (!authorId) return [];
+            var results = [];
+            var cursor = "*";
+            var pages = 0;
+            var maxPages = 20;
+            while (cursor && pages < maxPages) {
+                var url = "https://api.openalex.org/works?filter=authorships.author.id:" + encodeURIComponent(authorId) +
+                    "&per-page=200&cursor=" + encodeURIComponent(cursor) +
+                    "&mailto=" + encodeURIComponent(MAILTO);
+                var resp = await fetch(url);
+                if (!resp.ok) throw new Error("Failed to fetch works for " + authorId);
+                var json = await resp.json();
+                results = results.concat(json.results || []);
+                cursor = json.meta && json.meta.next_cursor;
+                pages += 1;
+                if (!cursor) break;
+            }
+            return results;
+        }
+        function initGraph(data) {
+            console.log(data);
+            window.data = data;
+            window.current_data = data;
+            // Used for grouping
+            window.paper_lookup = {}
+            // Quick built in summary stats for colorscale/size changes
+            for (var node of data) {
+                paper_lookup[node.id] = node;
+                node.n_authors = (node.authorships || []).length;
+                node.n_inst = uniq((node.authorships || []).map(a => (a.institutions && a.institutions.length > 0 && a.institutions[0].display_name) ? a.institutions[0].display_name : "Unknown Institution")).length;
+                node.n_fields = (node.concepts || []).length;
+                node.field = (node.concepts && node.concepts[0] && node.concepts[0].display_name) ? node.concepts[0].display_name : "Unknown Field";
+                if (node.primary_topic && node.primary_topic.domain) {
+                    node.domain = node.primary_topic.domain.display_name || "Unknown Domain";
+                    node.domains = [
+                        {
+                            id: node.primary_topic.domain.id,
+                            display_name: node.primary_topic.domain.display_name
+                        }
+                    ];
+                } else {
+                    node.domain = "Unknown Domain";
+                    node.domains = [];
+                }
+            }
+
+            var time_data = summarise_by_year(data);
+            console.log(time_data)
+
+            var plotData = [
+                {
+                    x: Object.keys(time_data),
+                    y: Object.values(time_data),
+                    marker: {
+                        color: Object.keys(time_data).map(k => DEFAULT_COLOR)
+                    },
+                    type: 'bar'
+                }
+            ];
+
+            var layout = {
+                title: 'Citations over time',
+                height: 300,
+                width: 300,
+                margin: {
+                    pad: 0,
+                    l: 40,
+                    r: 40,
+                    t: 70,
+                    b: 40
+                }
+            }
+
+            Plotly.newPlot('timeline', plotData, layout);
+            window.year = 2023
+            window.freeze = false;
+            $("#timeline").on('plotly_hover', function (event, data) {
+                if (window.freeze) return;
+                console.log(data)
+                var d = data.points[0]
+                var colors = Object.keys(d.data.x).map(k => DEFAULT_COLOR); // all colors for series
+                colors[d.pointNumber] = HIGHLIGHT_COLOR
+                Plotly.restyle('timeline', {
+                    marker: {
+                        color: colors
+                    }
+                });
+
+                if (window.year == d.x) return;
+                window.year = d.x;
+                console.log(year)
+                $("#year").text("as at " + year);
+                renderGraph(window.current_data, node => `<div class="nodetooltip">${generateHTMLTooltip(node)}</div>`, false, { year: year })
+            }).on("plotly_unhover", function(event, data) {
+                if (window.freeze) return;
+                console.log(data)
+                var d = data.points[0]
+                var colors = Object.keys(d.data.x).map(k => DEFAULT_COLOR); // all colors for series
+                colors[d.pointNumber] = DEFAULT_COLOR
+                Plotly.restyle('timeline', {
+                    marker: {
+                        color: colors
+                    }
+                });
+                $("#year").text("");
+                renderGraph(current_data, node => `<div class="nodetooltip">${generateHTMLTooltip(node)}</div>`, false, { applyYear: false })
+            }).on("plotly_click", function (event, data) {
+                window.freeze = !window.freeze;
+                var d = data.points[0]
+                var colors = Object.keys(d.data.x).map(k => DEFAULT_COLOR); // all colors for series
+                colors[d.pointNumber] = HIGHLIGHT_COLOR
+                Plotly.restyle('timeline', {
+                    marker: {
+                        color: colors
+                    }
+                });
+                console.log(d)
+                if (window.year == d.x) return;
+                window.year = d.x
+                $("#year").text("as at " + year);
+                renderGraph(window.current_data, node => `<div class="nodetooltip">${generateHTMLTooltip(node)}</div>`, false, { year: year })
+            });
+
+            var scale = colorscale(data.map(n => n.cited_by_count))
+
+            function generateHTMLTooltip(node, include_title = true) {
+                console.log(node);
+                let result = "";
+
+                if (include_title) {
+                    var title = node.title || node.name || "Unknown Title";
+                    result += `<b>${title} (${node.publication_year || "Unknown Year"})</b><br>`;
+                }
+
+                const authorships = node.authorships || [];
+                if (authorships.length > 0) {
+                    result += `${authorships.map(a => {
+                        const authorName = a.author?.display_name || "Unknown Author";
+                        const institutionName = a.institutions?.[0]?.display_name || "Unknown Institution";
+                        return a.institutions?.length ? `${authorName} (${institutionName})` : authorName;
+                    }).join(", ")}<br>`;
+                }
+
+                const primarySource = node.locations?.[0]?.source?.display_name;
+                if (primarySource) {
+                    result += `${primarySource}<br>`;
+                }
+
+                const concepts = node.concepts || [];
+                if (concepts.length > 0) {
+                    result += `${concepts.map(c => c.display_name || "Unknown Concept").join(", ")}<br>`;
+                }
+
+                result += `Citation count: ${node.cited_by_count || 0}<br>`;
+
+                return result;
+            }
+
+            var initial_nodes = capByCount(data, currentCap());
+            window.elem = document.getElementById("network");
+            window.graph = ForceGraph3D()(elem)
+                .graphData({
+                    nodes: initial_nodes,
+                    links: getEdges(initial_nodes)
+                })
+                .enableNodeDrag(false)
+                .nodeVal(n => n.cited_by_count || 0)
+                .nodeColor(n => scale(n.cited_by_count).css())
+                .nodeLabel(node => `<div class="nodetooltip">${generateHTMLTooltip(node)}</div>`)
+                .onNodeHover(node => elem.style.cursor = node ? 'pointer' : null)
+                .onNodeClick(node => {
+                    // Aim at node from outside it
+                    const distance = 40;
+                    const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
+
+                    graph.cameraPosition(
+                        { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }, // new position
+                        node, // lookAt ({ x, y, z })
+                        3000  // ms transition duration
+                    );
+                    $(".nodetooltip").remove();
+                    var doilink = node.doi;
+                    $("#modal-title").text(`${node.title} (${node.publication_year}))`);
+                    $("#modal-body").html(`${generateHTMLTooltip(node, false)}
+                        <a href="${doilink}">${doilink}</a><br>`);
+                    $("#modal").modal('show');
+                });
+            runCameraTour();
+
+            // Handle WebGL context lost
+            elem.addEventListener('webglcontextlost', (event) => {
+                alert('WebGL context lost. Please reload the page.');
+                event.preventDefault();
+            });
+            $("#spinner").hide();
+            applyStyles(initial_nodes);
+
+            $("#color").change(function () {
+                console.log(this.value)
+                applyStyles(graph.graphData().nodes);
+            })
+            $("#size").change(function () {
+                console.log(this.value)
+                applyStyles(graph.graphData().nodes);
+            })
+            $("#size_scale").change(function () {
+                applyStyles(graph.graphData().nodes);
+            })
+            $("#reset_year").click(function () {
+                window.freeze = false;
+                window.year = null;
+                $("#year").text("");
+                var time_data = summarise_by_year(window.current_data || []);
+                Plotly.restyle('timeline', {
+                    x: [Object.keys(time_data)],
+                    y: [Object.values(time_data)],
+                    marker: {
+                        color: Object.keys(time_data).map(k => DEFAULT_COLOR)
+                    }
+                });
+                Plotly.Fx.unhover('timeline');
+                renderGraph(
+                    window.current_data,
+                    window.group === "paper"
+                        ? node => `<div class="nodetooltip">${generateHTMLTooltip(node)}</div>`
+                        : n => `<div class="nodetooltip">${n.name}<br>Citations: ${n.cited_by_count}</div>`,
+                    window.group !== "paper",
+                    { applyYear: false }
+                );
+            })
+            $("#node_cap").change(function () {
+                var nodes = window.current_data || [];
+                renderGraph(
+                    nodes,
+                    window.group === "paper"
+                        ? node => `<div class="nodetooltip">${generateHTMLTooltip(node)}</div>`
+                        : n => `<div class="nodetooltip">${n.name}<br>Citations: ${n.cited_by_count}</div>`,
+                    window.group !== "paper"
+                )
+            })
+            $("#group").change(function () {
+                console.log(this.value)
+                if (is_grouped && data_base_for_groups) {
+                    var group_key = this.value;
+                    var group_url = group_key === "paper"
+                        ? `${data_base_for_groups}.json.gz`
+                        : `${data_base_for_groups}_group_${group_key}.json.gz`;
+                    if (window.group_data_cache && window.group_data_cache[group_key]) {
+                        window.group = group_key;
+                        window.current_data = window.group_data_cache[group_key];
+                        renderGraph(
+                            window.current_data,
+                            group_key === "paper"
+                                ? node => `<div class="nodetooltip">${generateHTMLTooltip(node)}</div>`
+                                : n => `<div class="nodetooltip">${n.name}<br>Citations: ${n.cited_by_count}</div>`,
+                            group_key !== "paper"
+                        )
+                        return;
+                    }
+                    loadJSON(group_url, function (groupedData) {
+                        window.group = group_key;
+                        window.group_data_cache = window.group_data_cache || {};
+                        window.group_data_cache[group_key] = groupedData;
+                        window.current_data = groupedData;
+                        renderGraph(
+                            groupedData,
+                            group_key === "paper"
+                                ? node => `<div class="nodetooltip">${generateHTMLTooltip(node)}</div>`
+                                : n => `<div class="nodetooltip">${n.name}<br>Citations: ${n.cited_by_count}</div>`,
+                            group_key !== "paper"
+                        )
+                    });
+                    return;
+                }
+                window.group = this.value;
+                if (this.value == "paper") {
+                    window.current_data = data;
+                    renderGraph(data, node => `<div class="nodetooltip">${generateHTMLTooltip(node)}</div>`)
+                    return;
+                }
+                if (this.value == "author") {
+                    var objkey = "authorships"
+                    var subkey = "author.id"
+                    var namekey = "author.display_name"
+                } else if (this.value == "inst") {
+                    var objkey = "authorships"
+                    var subkey = "institutions[0].id"
+                    var namekey = "institutions[0].display_name"
+                } else if (this.value == "field") {
+                    var objkey = "concepts"
+                    var subkey = "id"
+                    var namekey = "display_name"
+                } else if (this.value == "journal") {
+                    var objkey = "locations"
+                    var subkey = "source.id"
+                    var namekey = "source.display_name"
+                } else if (this.value == "domain") {
+                    var objkey = "domains"
+                    var subkey = "id"
+                    var namekey = "display_name"
+                }
+                var groupedData = {};
+                for (var node of data) {
+                    var seen_ids_this_node = {}
+                    if (!Array.isArray(node[objkey])) continue; // Ensure objkey is iterable
+                    for (var obj of node[objkey]) {
+                        var id = _.get(obj, subkey)
+                        if (!id || seen_ids_this_node[id]) continue
+                        seen_ids_this_node[id] = true
+                        if (!groupedData[id]) {
+                            groupedData[id] = {
+                                id: id,
+                                cited_by_count: 0,
+                                name: _.get(obj, namekey),
+                                publication_year: node.publication_year,
+                                referenced_works: []
+                            }
+                        }
+                        groupedData[id].cited_by_count += node.cited_by_count
+                        if (groupedData[id].publication_year > node.publication_year) groupedData[id].publication_year = node.publication_year;
+                        for (var ref of node.referenced_works) {
+                            var paper = paper_lookup[ref];
+                            if (!paper) continue
+                            if (!paper[objkey]) continue
+                            for (var other of paper[objkey]) {
+                                var otherId = _.get(other, subkey)
+                                if (!otherId) continue
+                                if (!groupedData[id].referenced_works.includes(otherId)) groupedData[id].referenced_works.push(otherId)
+                            }
+                        }
+                    }
+                }
+                console.log(groupedData)
+                groupedData = Object.values(groupedData)
+                window.current_data = groupedData;
+                var filteredData = groupedData;
+                if (window.year) {
+                    filteredData = filteredData.filter(n => n.publication_year <= window.year)
+                }
+                console.log(filteredData)
+                renderGraph(
+                    filteredData,
+                    n => `<div class="nodetooltip">${n.name}<br>Citations: ${n.cited_by_count}</div>`,
+                    true
+                )
+            })
+
+            // Default group view
+            if (pre_group) {
+                window.group = pre_group;
+                $("#group").val(pre_group);
+            } else {
+                $("#group").val("author").trigger("change");
+            }
+        }
+
+        $("#subtitle").text("Loading...");
+        if (authorQuery) {
+            $("#spinner").show();
+            (async function () {
+                try {
+                    var authorId = authorQuery;
+                    var authorName = null;
+                    var looksLikeId = /^a?\d+$/i.test(authorQuery) || authorQuery.toLowerCase().includes("openalex.org/a");
+                    if (!looksLikeId) {
+                        var res = await fetchAuthorIdByName(authorQuery);
+                        authorId = res && res.id;
+                        authorName = res && res.name;
+                    } else {
+                        authorId = normalizeAuthorId(authorId);
+                        authorName = await fetchAuthorNameById(authorId);
+                    }
+                    var works = await fetchAuthorWorks(authorId);
+                    $("#subtitle").text((authorName || "Author") + "'s citation network");
+                    initGraph(works);
+                } catch (err) {
+                    console.error(err);
+                    $("#alert").show();
+                    $("#requestdetails").text("author");
+                    $("#spinner").hide();
+                }
+            })();
+        } else {
+            loadJSON(data, function (data) {
+                initGraph(data);
+                if (!isDecolonizing) {
+                    $("#subtitle").text("");
+                }
+            });
+        }
+        function toggleGUI() {
+            const controls = document.getElementById('controls');
+            if (controls) {
+                controls.classList.toggle('hidden');
+            } else {
+                console.error('Element with id "controls" not found.');
+            }
+        }
+    </script>
+    <script>
+        // Check for WebGL support
+        function isWebGLAvailable() {
+            try {
+                var canvas = document.createElement('canvas');
+                return !!(window.WebGL2RenderingContext && canvas.getContext('webgl2'));
+            } catch (e) {
+                return false;
+            }
+        }
+
+        if (!isWebGLAvailable()) {
+            document.body.innerHTML = '<div style="color: red; text-align: center; margin-top: 20%; font-size: 1.5rem;">' +
+                'WebGL is not supported or enabled in your browser. Please enable hardware acceleration or use a compatible browser.' +
+                '</div>';
+        }
+    </script>
+</body>
+
+</html>
