@@ -369,8 +369,22 @@
         const urlParams = new URLSearchParams(window.location.search);
         const API_KEY_PARAM = "api_key";
         const API_KEY_STORAGE = "openalex_api_key";
-        function getApiKey() {
+        function extractApiKeyFromDataParam(dataParam) {
+            if (!dataParam) return null;
+            var idx = dataParam.indexOf("?");
+            if (idx === -1) return null;
+            var query = dataParam.slice(idx + 1);
+            try {
+                var params = new URLSearchParams(query);
+                return params.get(API_KEY_PARAM);
+            } catch (err) {
+                console.warn("Failed to parse api_key from data param:", err);
+                return null;
+            }
+        }
+        function getApiKey(fallbackKey) {
             var key = urlParams.get(API_KEY_PARAM);
+            if (!key && fallbackKey) key = fallbackKey;
             if (key && key.trim()) {
                 try {
                     localStorage.setItem(API_KEY_STORAGE, key.trim());
@@ -387,13 +401,17 @@
             }
             return null;
         }
-        const API_KEY = getApiKey();
+        var data = urlParams.get('data');
+        var embeddedApiKey = extractApiKeyFromDataParam(data);
+        const API_KEY = getApiKey(embeddedApiKey);
         function appendApiKey(url) {
             if (!API_KEY) return url;
             var joiner = url.includes("?") ? "&" : "?";
             return url + joiner + "api_key=" + encodeURIComponent(API_KEY);
         }
-        var data = urlParams.get('data');
+        if (data && data.includes("?")) {
+            data = data.split("?")[0];
+        }
         var authorQuery = null;
         if (data && data.toLowerCase().startsWith("author:")) {
             authorQuery = data.slice("author:".length);
@@ -543,6 +561,23 @@
             }
             return s.startsWith("A") ? ("https://openalex.org/" + s) : s;
         }
+        function shortAuthorId(input) {
+            if (!input) return null;
+            var s = input.trim();
+            if (s.startsWith("https://openalex.org/")) {
+                s = s.replace("https://openalex.org/", "");
+            }
+            if (/^a\d+$/i.test(s)) {
+                s = "A" + s.slice(1);
+            }
+            if (/^\d+$/.test(s)) {
+                s = "A" + s;
+            }
+            return s.startsWith("A") ? s : null;
+        }
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
         async function fetchAuthorIdByName(name) {
             var url = "https://api.openalex.org/authors?search=" + encodeURIComponent(name) +
                 "&per-page=1&mailto=" + encodeURIComponent(MAILTO);
@@ -558,7 +593,9 @@
             };
         }
         async function fetchAuthorNameById(authorId) {
-            var url = "https://api.openalex.org/authors/" + encodeURIComponent(authorId) +
+            var shortId = shortAuthorId(authorId);
+            if (!shortId) return null;
+            var url = "https://api.openalex.org/authors/" + encodeURIComponent(shortId) +
                 "?mailto=" + encodeURIComponent(MAILTO);
             url = appendApiKey(url);
             var resp = await fetch(url);
@@ -573,6 +610,7 @@
             var cursor = "*";
             var pages = 0;
             var maxPages = 20;
+            var pageDelayMs = 350;
             while (cursor && pages < maxPages) {
                 var url = "https://api.openalex.org/works?filter=authorships.author.id:" + encodeURIComponent(authorId) +
                     "&per-page=200&cursor=" + encodeURIComponent(cursor) +
@@ -585,6 +623,7 @@
                 cursor = json.meta && json.meta.next_cursor;
                 pages += 1;
                 if (!cursor) break;
+                await sleep(pageDelayMs);
             }
             return results;
         }
