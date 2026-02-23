@@ -6,32 +6,16 @@ To show visualisation of authors, papers, institutions, and fields.
 
 Examples from the MMBB:
 
-- [Petri Toiviainen](http://tuomaseerola.github.io/index.html?data=https://openalex.org/a5028633802)
+- [Petri Toiviainen](http://tuomaseerola.github.io/citations/index.html?data=https://openalex.org/a5028633802)
 
-- [Suvi Saarikallio](http://tuomaseerola.github.io/index.html?data=https://openalex.org/a5007264746)
+- [Suvi Saarikallio](http://tuomaseerola.github.io/citations/index.html?data=https://openalex.org/a5007264746)
 
-- [Tuomas Eerola](http://tuomaseerola.github.io/index.html?data=https://openalex.org/a5039535349)
+- [Tuomas Eerola](http://tuomaseerola.github.io/citations/index.html?data=https://openalex.org/a5039535349)
 
 
 There is a possibility to control the camera as well, so 
-[Zoom in to Petri Toiviainen's papers](http://tuomaseerola.github.io/index.html?data=https://openalex.org/a5028633802&cam0=0,0,300&cam1=50,20,120&camms=4000&camdelay=1000)
+[Zoom in to Petri Toiviainen's papers](http://tuomaseerola.github.io/citations/index.html?data=https://openalex.org/a5028633802&cam0=0,0,300&cam1=50,20,120&camms=4000&camdelay=1000)
 
 
 ## Geography of Collaborations
-
-
-###
-OpenAlex API key
-created 23 Feb 2026
-yONbwjgCXk1eunyTjDJCcA
-
-
-
-
-GET https://api.openalex.org/rate-limit?api_key=yONbwjgCXk1eunyTjDJCcA
-
-
-
-export OPENALEX_API_KEY="yONbwjgCXk1eunyTjDJCcA"
-
 
