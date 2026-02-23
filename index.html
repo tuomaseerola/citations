@@ -367,6 +367,32 @@
             window.history.replaceState(null, "", window.location.pathname + "?data=" + DEFAULT_AUTHOR_QUERY);
         }
         const urlParams = new URLSearchParams(window.location.search);
+        const API_KEY_PARAM = "api_key";
+        const API_KEY_STORAGE = "openalex_api_key";
+        function getApiKey() {
+            var key = urlParams.get(API_KEY_PARAM);
+            if (key && key.trim()) {
+                try {
+                    localStorage.setItem(API_KEY_STORAGE, key.trim());
+                } catch (err) {
+                    console.warn("Failed to persist api_key:", err);
+                }
+                return key.trim();
+            }
+            try {
+                var stored = localStorage.getItem(API_KEY_STORAGE);
+                if (stored && stored.trim()) return stored.trim();
+            } catch (err) {
+                console.warn("Failed to read stored api_key:", err);
+            }
+            return null;
+        }
+        const API_KEY = getApiKey();
+        function appendApiKey(url) {
+            if (!API_KEY) return url;
+            var joiner = url.includes("?") ? "&" : "?";
+            return url + joiner + "api_key=" + encodeURIComponent(API_KEY);
+        }
         var data = urlParams.get('data');
         var authorQuery = null;
         if (data && data.toLowerCase().startsWith("author:")) {
@@ -517,14 +543,10 @@
             }
             return s.startsWith("A") ? ("https://openalex.org/" + s) : s;
         }
-        function toShortAuthorId(input) {
-            var normalized = normalizeAuthorId(input);
-            if (!normalized) return null;
-            return normalized.replace("https://openalex.org/", "");
-        }
         async function fetchAuthorIdByName(name) {
             var url = "https://api.openalex.org/authors?search=" + encodeURIComponent(name) +
                 "&per-page=1&mailto=" + encodeURIComponent(MAILTO);
+            url = appendApiKey(url);
             var resp = await fetch(url);
             if (!resp.ok) throw new Error("Failed to search author: " + name);
             var json = await resp.json();
@@ -536,61 +558,35 @@
             };
         }
         async function fetchAuthorNameById(authorId) {
-            var normalized = normalizeAuthorId(authorId);
-            if (!normalized) return null;
-            var shortId = toShortAuthorId(normalized);
-            var candidates = [normalized, shortId].filter(Boolean);
-            for (var i = 0; i < candidates.length; i++) {
-                var candidate = candidates[i];
-                var url = "https://api.openalex.org/authors/" + encodeURIComponent(candidate) +
-                    "?mailto=" + encodeURIComponent(MAILTO);
-                try {
-                    var resp = await fetch(url);
-                    if (!resp.ok) continue;
-                    var json = await resp.json();
-                    if (json && json.display_name) return json.display_name;
-                } catch (err) {
-                    console.warn("Author name lookup failed for", candidate, err);
-                }
-            }
-            return null;
+            var url = "https://api.openalex.org/authors/" + encodeURIComponent(authorId) +
+                "?mailto=" + encodeURIComponent(MAILTO);
+            url = appendApiKey(url);
+            var resp = await fetch(url);
+            if (!resp.ok) return null;
+            var json = await resp.json();
+            return json && json.display_name ? json.display_name : null;
         }
         async function fetchAuthorWorks(authorInput) {
-            var normalized = normalizeAuthorId(authorInput);
-            if (!normalized) return [];
-            var shortId = toShortAuthorId(normalized);
-            var candidates = [normalized, shortId].filter(Boolean);
-            var lastErr = null;
-            async function fetchForCandidate(candidateId) {
-                var results = [];
-                var cursor = "*";
-                var pages = 0;
-                var maxPages = 20;
-                while (cursor && pages < maxPages) {
-                    var url = "https://api.openalex.org/works?filter=authorships.author.id:" + encodeURIComponent(candidateId) +
-                        "&per-page=200&cursor=" + encodeURIComponent(cursor) +
-                        "&mailto=" + encodeURIComponent(MAILTO);
-                    var resp = await fetch(url);
-                    if (!resp.ok) throw new Error("Failed to fetch works for " + candidateId);
-                    var json = await resp.json();
-                    results = results.concat(json.results || []);
-                    cursor = json.meta && json.meta.next_cursor;
-                    pages += 1;
-                    if (!cursor) break;
-                }
-                return results;
+            var authorId = normalizeAuthorId(authorInput);
+            if (!authorId) return [];
+            var results = [];
+            var cursor = "*";
+            var pages = 0;
+            var maxPages = 20;
+            while (cursor && pages < maxPages) {
+                var url = "https://api.openalex.org/works?filter=authorships.author.id:" + encodeURIComponent(authorId) +
+                    "&per-page=200&cursor=" + encodeURIComponent(cursor) +
+                    "&mailto=" + encodeURIComponent(MAILTO);
+                url = appendApiKey(url);
+                var resp = await fetch(url);
+                if (!resp.ok) throw new Error("Failed to fetch works for " + authorId);
+                var json = await resp.json();
+                results = results.concat(json.results || []);
+                cursor = json.meta && json.meta.next_cursor;
+                pages += 1;
+                if (!cursor) break;
             }
-            for (var i = 0; i < candidates.length; i++) {
-                try {
-                    var works = await fetchForCandidate(candidates[i]);
-                    if (works && works.length > 0) return works;
-                } catch (err) {
-                    lastErr = err;
-                    console.warn("Author works lookup failed for", candidates[i], err);
-                }
-            }
-            if (lastErr) throw lastErr;
-            return [];
+            return results;
         }
         function initGraph(data) {
             console.log(data);
